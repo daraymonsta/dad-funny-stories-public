@@ -1,0 +1,24 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "profileName": {
+        "value": "resumecdnprofile100"
+      },
+      "endpointName": {
+        "value": "generalsettings"
+      },
+      "dnszone_topleveldomain_name": {
+        "value": "com"
+      },
+      "CDNSku": {
+        "value": "Standard_Microsoft"
+      },
+      "cdnLocation": {
+        "value": "global"
+      },
+      "website_storage_account_name": {
+        "value": "websiteresumestorage100"
+      }
+    }
+  }

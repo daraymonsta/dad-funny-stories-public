@@ -1,0 +1,109 @@
+name: Test Get Cosmos Account Endpoint+Key
+
+# Controls when the workflow will run
+on:
+  # Triggers the workflow on push or pull request events but only for the "main" branch
+  #push:
+  #  branches: [ "main" ]
+  #pull_request:
+  #  branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  extraction:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      - name: JSON to variables
+        uses: antifree/json-to-variables@v1.0.1
+        with:
+          filename: './back-end/arm-templates/azuredeploy.parameters.json'
+          prefix: fromjson
+          
+      - name: Show output
+        run: |
+          echo "The resource group is ${{ env.fromjson_parameters_resource_group_value }}"
+          echo "The region is ${{ env.fromjson_parameters_cosmos_db_account_name_value }}"
+          echo "The function app name is ${{ env.fromjson_parameters_function_app_name_value }}"
+      
+      # Logs into Azure with GitHub secret
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_SUB_CREDENTIALS }}
+              
+      - name: Save Connection String to File
+        id: saveconnectionstr
+        run: |
+          echo "[" > output.json
+          az cosmosdb keys list --name sql-cosmos-db-account --resource-group CloudResumeChallenge --type connection-strings >> output.json
+          echo "]" >> output.json
+
+      - name: Get Nested Property
+        id: extractfromfile
+        uses: notiz-dev/github-action-json-property@release
+        with: 
+            path: 'output.json'
+            prop_path: '0.connectionStrings.0.connectionString'
+        
+      - run: echo ${{steps.extractfromfile.outputs.prop}} 
+
+      - name: Run Python to Output Endpoint
+        uses: jannekem/run-python-script-action@v1
+        id: getendpoint
+        with:
+          fail-on-error: false
+          script: |
+            prim_conn_str = "${{steps.extractfromfile.outputs.prop}}"
+            conn_str_list = prim_conn_str.split(';')
+            account_endpoint = conn_str_list[0].split("AccountEndpoint=",1)[1]
+            print(account_endpoint)
+            
+      - name: Print Python output
+        if: steps.getendpoint.outputs.error == 'false'
+        run: |
+          printenv "SCRIPT_STDOUT"
+        env:
+          SCRIPT_STDOUT: ${{ steps.getendpoint.outputs.stdout }}
+
+      - name: Run Python to Output Key
+        uses: jannekem/run-python-script-action@v1
+        id: getkey
+        with:
+          fail-on-error: false
+          script: |
+            prim_conn_str = "${{steps.extractfromfile.outputs.prop}}"
+            conn_str_list = prim_conn_str.split(';')
+            account_key = conn_str_list[1].split("AccountKey=",1)[1]
+            print(account_key)
+            
+      - name: Print Python output
+        if: steps.getkey.outputs.error == 'false'
+        run: |
+          printenv "SCRIPT_STDOUT"
+        env:
+          SCRIPT_STDOUT: ${{ steps.getkey.outputs.stdout }}
+
+      - name: Add Application Settings
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.30.0
+          inlineScript: |
+            az webapp config connection-string set -g ${{ env.fromjson_parameters_resource_group_value }} -n ${{ env.fromjson_parameters_function_app_name_value }} -t Custom \
+              --settings AzureCosmosDBConnectionString='${{steps.extractfromfile.outputs.prop}}'
+            az functionapp config appsettings set --name ${{ env.fromjson_parameters_function_app_name_value }} --resource-group ${{ env.fromjson_parameters_resource_group_value }} --settings "AzureCosmosDBAccountEndpoint=${{ steps.getendpoint.outputs.stdout }}"
+            az functionapp config appsettings set --name ${{ env.fromjson_parameters_function_app_name_value }} --resource-group ${{ env.fromjson_parameters_resource_group_value }} --settings "AzureCosmosDBAccountKey=${{ steps.getkey.outputs.stdout }}"
+
+      # Azure logout
+      - name: logout
+        run: |
+            az logout
+        if: always()
