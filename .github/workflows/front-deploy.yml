@@ -52,7 +52,7 @@ jobs:
         uses: azure/CLI@v1
         with:
           inlineScript: |
-            az storage blob service-properties update --account-name ${{ env.fromjson_parameters_website_storage_account_name_value }} --static-website --index-document resume.html
+            az storage blob service-properties update --account-name ${{ env.fromjson_parameters_website_storage_account_name_value }} --static-website --index-document index.html
             az storage blob upload-batch --account-name ${{ env.fromjson_parameters_website_storage_account_name_value }} --auth-mode login -d '$web' -s front-end/. --overwrite
             az cdn endpoint purge --content-paths "/*" --profile-name "${{ env.fromjson_parameters_cdn_profile_name_value }}" --name "${{ env.fromjson_parameters_endpointName_value }}" --resource-group "${{ env.fromjson_parameters_resource_group_value }}"            
 
